@@ -166,8 +166,9 @@ pub enum Error {
 	/// request was well-formed.
 	#[error("{1}")]
 	Unavailable(Option<RequestId>, String),
-	// Intentionally do NOT say its not authorized; we hide the existence of the tool
-	#[error("Unknown {1}: {2}")]
+	// The client-facing JSON-RPC message intentionally does NOT say it's not authorized (we hide the
+	// existence of the tool); see `jsonrpc_error_body`. The Display form is internal (logs) only.
+	#[error("authorization denied for {1}: {2}")]
 	Authorization(RequestId, String, String),
 	#[error("mcpGuardrails rejected: {}", .rej.message)]
 	McpGuardrails {
@@ -290,6 +291,10 @@ impl Error {
 				},
 			),
 			_ => {
+				let message = match self {
+					Error::Authorization(_, kind, name) => format!("Unknown {kind}: {name}"),
+					_ => self.to_string(),
+				};
 				let (id, code) = match self {
 					Error::SendError(Some(id), _) | Error::Unavailable(Some(id), _) => {
 						(id.clone(), ErrorCode::INTERNAL_ERROR)
@@ -306,7 +311,7 @@ impl Error {
 					id,
 					ErrorData {
 						code,
-						message: self.to_string().into(),
+						message: message.into(),
 						data: None,
 					},
 				)

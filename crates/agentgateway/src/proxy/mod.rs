@@ -89,6 +89,7 @@ impl ProxyError {
 			ProxyError::APIKeyAuthenticationFailure(_) => ProxyResponseReason::APIKeyAuth,
 			ProxyError::ExternalAuthorizationFailed(_) => ProxyResponseReason::ExtAuth,
 			ProxyError::MCP(mcp::Error::RateLimited { .. }) => ProxyResponseReason::RateLimit,
+			ProxyError::MCP(mcp::Error::Authorization(..)) => ProxyResponseReason::Authorization,
 			ProxyError::MCP(_) => ProxyResponseReason::MCP,
 			ProxyError::AuthorizationFailed
 			| ProxyError::SubstrateEgressDenied(_)
@@ -812,6 +813,23 @@ mod tests {
 			assert_eq!(status.code(), code, "{message}");
 			assert_eq!(status.message(), message);
 		}
+	}
+
+	#[test]
+	fn mcp_authorization_denial_is_logged_distinctly_but_hidden_from_client() {
+		let err = mcp::Error::Authorization(
+			rmcp::model::RequestId::Number(1),
+			"tool".to_string(),
+			"get-sum".to_string(),
+		);
+		assert_eq!(err.to_string(), "authorization denied for tool: get-sum");
+		let body = err.jsonrpc_error_body().unwrap();
+		assert!(body.contains("Unknown tool: get-sum"), "{body}");
+		assert!(!body.contains("authorization"), "{body}");
+		assert_eq!(
+			ProxyError::MCP(err).as_reason(),
+			ProxyResponseReason::Authorization
+		);
 	}
 
 	#[test]
